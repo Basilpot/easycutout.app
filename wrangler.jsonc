@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "easycutout",
+  "compatibility_date": "2026-10-01",
+  // easycutout.app is the canonical domain (VITE_SITE_URL in .env). The old basilpot.com
+  // subdomain stays attached so existing links keep working; canonical tags point to .app.
+  "routes": [
+    { "pattern": "easycutout.app", "custom_domain": true },
+    { "pattern": "www.easycutout.app", "custom_domain": true },
+    { "pattern": "easycutout.basilpot.com", "custom_domain": true }
+  ],
+  // Static site only: no Worker script runs, so requests are free and unlimited
+  // and never count toward the Workers Free plan's 100k requests/day.
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "404-page"
+  }
+}

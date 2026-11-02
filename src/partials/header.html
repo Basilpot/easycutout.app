@@ -1,0 +1,14 @@
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="EasyCutout home">
+        <img src="/favicon.svg" width="26" height="26" alt="" />
+        <span>EasyCutout</span>
+      </a>
+      <nav aria-label="Tools">
+        <a href="/"><span class="nav-long">Remove background</span><span class="nav-short">Remove BG</span></a>
+        <a href="/square-image-maker"><span class="nav-long">Square image</span><span class="nav-short">Square</span></a>
+        <a href="/round-corners"><span class="nav-long">Round corners</span><span class="nav-short">Corners</span></a>
+      </nav>
+      <script>
+        for (const a of document.querySelectorAll('.site-header nav a')) if (a.pathname === location.pathname) a.setAttribute('aria-current', 'page');
+      </script>
+    </header>

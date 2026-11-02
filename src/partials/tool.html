@@ -1,0 +1,173 @@
+      <section id="tool" class="tool" aria-label="Background remover">
+        <!-- Empty state -->
+        <div id="drop" class="drop" data-state="empty">
+          <input id="file" type="file" accept="image/png,image/jpeg,image/webp,image/avif,image/gif,image/bmp,image/heic,image/heif" hidden />
+          <svg class="drop-icon" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="3" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <path d="m21 15-5-5L5 21" />
+          </svg>
+          <button id="pick" class="btn btn-primary btn-lg" type="button">Upload image</button>
+          <p class="drop-hint">
+            <span class="hint-desktop">or drop a file here, or paste with <kbd>Ctrl</kbd>+<kbd>V</kbd></span>
+            <button id="paste" class="link-btn" type="button" hidden>Paste from clipboard</button>
+          </p>
+          <p class="drop-fine">JPG, PNG, WebP or AVIF · up to 40&nbsp;MB</p>
+        </div>
+
+        <div class="samples" id="samples">
+          <span>No image? Try one:</span>
+          <button type="button" data-sample="/samples/dog.jpg"><img src="/samples/dog-thumb.jpg" alt="Sample: dog wrapped in a blanket" width="72" height="48" /></button>
+          <button type="button" data-sample="/samples/person.jpg"><img src="/samples/person-thumb.jpg" alt="Sample: person holding flowers" width="72" height="48" /></button>
+          <button type="button" data-sample="/samples/bear.jpg"><img src="/samples/bear-thumb.jpg" alt="Sample: brown bear" width="72" height="48" /></button>
+        </div>
+
+        <!-- Working / result state -->
+        <div id="work" class="work" tabindex="-1" hidden>
+          <div class="stage" id="stage">
+            <div class="canvas-wrap" id="canvas-wrap" hidden><canvas id="canvas" role="img" aria-label="Result with the background removed"></canvas></div>
+            <div class="scan" aria-hidden="true"></div>
+          </div>
+
+          <div class="status" id="status-box">
+            <div class="progress" id="progress" hidden>
+              <div class="progress-bar" id="progress-bar"></div>
+            </div>
+            <p id="status" role="status" aria-live="polite"></p>
+          </div>
+
+          <div class="editor" id="editor" hidden>
+            <div class="editor-bar">
+              <div class="tabs" role="tablist" aria-label="Edit">
+                <button type="button" role="tab" id="tab-bg" aria-controls="panel-bg" aria-selected="true">Background</button>
+                <button type="button" role="tab" id="tab-crop" aria-controls="panel-crop" aria-selected="false" tabindex="-1">Crop</button>
+                <button type="button" role="tab" id="tab-square" aria-controls="panel-square" aria-selected="false" tabindex="-1">Square</button>
+                <button type="button" role="tab" id="tab-corners" aria-controls="panel-corners" aria-selected="false" tabindex="-1">Corners</button>
+                <button type="button" role="tab" id="tab-size" aria-controls="panel-size" aria-selected="false" tabindex="-1">Resize</button>
+              </div>
+              <div class="editor-tools">
+                <button type="button" class="tool-btn" id="redo" title="Run background removal again. After cropping, it only looks at the cropped area, which often gives finer edges.">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8" /><path d="M21 3v5h-5" /></svg>
+                  <span id="redo-label">Redo removal</span>
+                </button>
+                <button type="button" class="tool-btn" id="edits-reset">Reset edits</button>
+              </div>
+            </div>
+
+            <div role="tabpanel" id="panel-bg" aria-labelledby="tab-bg" class="panel">
+              <div class="swatches" role="radiogroup" aria-label="Background color">
+                <button type="button" class="sw sw-none" role="radio" data-bg="" aria-label="Transparent" title="Transparent" aria-checked="true"></button>
+                <button type="button" class="sw sw-photo" role="radio" data-bg="photo" aria-label="Original background" title="Original background" aria-checked="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" /></svg></button>
+                <button type="button" class="sw" role="radio" data-bg="#ffffff" aria-label="White" title="White" aria-checked="false" style="--sw: #ffffff"></button>
+                <button type="button" class="sw" role="radio" data-bg="#f1f1ef" aria-label="Light gray" title="Light gray" aria-checked="false" style="--sw: #f1f1ef"></button>
+                <button type="button" class="sw" role="radio" data-bg="#111111" aria-label="Black" title="Black" aria-checked="false" style="--sw: #111111"></button>
+                <button type="button" class="sw" role="radio" data-bg="#e5484d" aria-label="Red" title="Red" aria-checked="false" style="--sw: #e5484d"></button>
+                <button type="button" class="sw" role="radio" data-bg="#f76b15" aria-label="Orange" title="Orange" aria-checked="false" style="--sw: #f76b15"></button>
+                <button type="button" class="sw" role="radio" data-bg="#ffc53d" aria-label="Yellow" title="Yellow" aria-checked="false" style="--sw: #ffc53d"></button>
+                <button type="button" class="sw" role="radio" data-bg="#30a46c" aria-label="Green" title="Green" aria-checked="false" style="--sw: #30a46c"></button>
+                <button type="button" class="sw" role="radio" data-bg="#0090ff" aria-label="Blue" title="Blue" aria-checked="false" style="--sw: #0090ff"></button>
+                <button type="button" class="sw" role="radio" data-bg="#3a49d9" aria-label="Indigo" title="Indigo" aria-checked="false" style="--sw: #3a49d9"></button>
+                <button type="button" class="sw" role="radio" data-bg="#8e4ec6" aria-label="Purple" title="Purple" aria-checked="false" style="--sw: #8e4ec6"></button>
+                <button type="button" class="sw" role="radio" data-bg="#e93d82" aria-label="Pink" title="Pink" aria-checked="false" style="--sw: #e93d82"></button>
+                <label class="sw sw-custom" title="Custom color"><input type="color" id="bg-custom" value="#a3d8ff" aria-label="Custom background color" /></label>
+              </div>
+              <label class="hex-row">
+                <span>Hex</span>
+                <input id="bg-hex" class="hex-input" type="text" maxlength="7" spellcheck="false" autocomplete="off" autocapitalize="characters" placeholder="#A3D8FF" aria-describedby="hex-hint" />
+                <span id="hex-hint" class="hex-hint">e.g. #FFFFFF</span>
+              </label>
+            </div>
+
+            <div role="tabpanel" id="panel-crop" aria-labelledby="tab-crop" class="panel" hidden>
+              <div class="chips" role="radiogroup" aria-label="Aspect ratio">
+                <button type="button" class="chip" role="radio" data-aspect="free" aria-checked="true">Free</button>
+                <button type="button" class="chip" role="radio" data-aspect="original" aria-checked="false">Original</button>
+                <button type="button" class="chip" role="radio" data-aspect="1" aria-checked="false">1:1</button>
+                <button type="button" class="chip" role="radio" data-aspect="0.8" aria-checked="false">4:5</button>
+                <button type="button" class="chip" role="radio" data-aspect="0.75" aria-checked="false">3:4</button>
+                <button type="button" class="chip" role="radio" data-aspect="1.7778" aria-checked="false">16:9</button>
+                <button type="button" class="chip" role="radio" data-aspect="0.5625" aria-checked="false">9:16</button>
+              </div>
+              <div class="panel-row">
+                <button type="button" class="tool-btn" id="crop-fit">Fit to subject</button>
+                <button type="button" class="tool-btn" id="crop-clear">Remove crop</button>
+              </div>
+              <p class="panel-hint">Drag the box or its corners. “Fit to subject” adds even margins, handy for product photos. After cropping, “Redo removal” re-checks just that area for finer edges.</p>
+            </div>
+
+            <div role="tabpanel" id="panel-square" aria-labelledby="tab-square" class="panel" hidden>
+              <div class="chips" role="radiogroup" aria-label="Square mode">
+                <button type="button" class="chip" role="radio" data-square="image" aria-checked="false">Whole image</button>
+                <button type="button" class="chip" role="radio" data-square="subject" aria-checked="false">Around subject</button>
+              </div>
+              <label class="slider">
+                <span>Margin</span>
+                <input type="range" id="square-margin" min="0" max="30" step="1" value="5" />
+                <span class="slider-value" id="square-margin-out" aria-hidden="true">5%</span>
+              </label>
+              <p class="panel-hint">Makes your image square without cutting anything off. The extra space uses your background color, or stays transparent. Handy for profile pictures, marketplaces and social posts.</p>
+            </div>
+
+            <div role="tabpanel" id="panel-corners" aria-labelledby="tab-corners" class="panel" hidden>
+              <label class="slider">
+                <span>Radius</span>
+                <input type="range" id="radius" min="0" max="50" step="1" value="0" />
+                <span class="slider-value" id="radius-out" aria-hidden="true">0%</span>
+              </label>
+              <div class="chips" aria-label="Corner presets">
+                <button type="button" class="chip" data-radius="0">None</button>
+                <button type="button" class="chip" data-radius="4">Small</button>
+                <button type="button" class="chip" data-radius="10">Medium</button>
+                <button type="button" class="chip" data-radius="20">Large</button>
+                <button type="button" class="chip" data-radius="50">Circle</button>
+              </div>
+              <p class="panel-hint">Rounded corners are transparent in the PNG and white in a JPG. For a round profile picture, make the image square first, then choose “Circle”.</p>
+            </div>
+
+            <div role="tabpanel" id="panel-size" aria-labelledby="tab-size" class="panel" hidden>
+              <div class="size-row">
+                <label>Width <input id="size-w" type="number" inputmode="numeric" min="1" max="6000" /></label>
+                <span aria-hidden="true">×</span>
+                <label>Height <input id="size-h" type="number" inputmode="numeric" min="1" max="6000" /></label>
+                <span class="size-unit">px</span>
+              </div>
+              <div class="chips" aria-label="Size presets">
+                <button type="button" class="chip" data-scale="0.25">25%</button>
+                <button type="button" class="chip" data-scale="0.5">50%</button>
+                <button type="button" class="chip" data-scale="1">100%</button>
+                <button type="button" class="chip" data-long="512">512 px</button>
+                <button type="button" class="chip" data-long="1080">1080 px</button>
+                <button type="button" class="chip" data-long="2048">2048 px</button>
+              </div>
+              <p class="panel-hint">Width and height stay in proportion; use Crop to change the shape. Pixel presets set the longer side.</p>
+            </div>
+          </div>
+
+          <div class="actions" id="actions">
+            <div class="toggle" role="group" aria-label="Preview" id="toggle" hidden>
+              <button type="button" data-view="result" aria-pressed="true">Result</button>
+              <button type="button" data-view="original" aria-pressed="false">Original</button>
+            </div>
+            <div class="action-buttons">
+              <button id="reset" class="btn btn-ghost" type="button">New image</button>
+              <button id="download-jpg" class="btn btn-ghost" type="button" hidden>JPG</button>
+              <button id="download" class="btn btn-primary" type="button" hidden>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16" /></svg>
+                Download PNG
+              </button>
+              <button id="retry" class="btn btn-primary" type="button" hidden>Try again</button>
+            </div>
+          </div>
+          <p class="out-size" id="out-size" hidden></p>
+        </div>
+        <!--#slot note-->
+      </section>
+
+      <section id="history" class="history" aria-labelledby="history-title" hidden>
+        <div class="history-head">
+          <h2 id="history-title">Your recent images</h2>
+          <button id="history-clear" class="link-btn" type="button">Clear all</button>
+        </div>
+        <p class="history-note">Saved only in this browser, on this device. Click one to keep editing. Up to 30 images are kept.</p>
+        <ul id="history-list" class="history-list"></ul>
+      </section>

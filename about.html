@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>About – EasyCutout</title>
+    <meta name="description" content="About EasyCutout, the free background remover that runs in your browser." />
+    <link rel="canonical" href="%VITE_SITE_URL%/about" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<!--#include analytics-->
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <!--#include header-->
+    <main class="page">
+      <h1>About EasyCutout</h1>
+      <p>EasyCutout is a free, easy background remover. It removes the background from a photo automatically, lets you pick a new background color, crop and resize, and gives you a full-resolution PNG or JPG. No account, no watermark, no credits.</p>
+
+      <h2>Why it runs in your browser</h2>
+      <p>Most background removers send your photo to a remote server. That costs money to run, which is why they usually limit free use, and it means a stranger’s computer sees your photo. EasyCutout runs the AI model directly on your device, so it can stay free and your images stay private.</p>
+
+      <h2>The technology</h2>
+      <p>The background is detected by <a href="https://github.com/xuebinqin/DIS" rel="noopener">IS-Net</a>, a segmentation model from the research paper “Highly Accurate Dichotomous Image Segmentation” (Qin et al., ECCV 2022), released under the Apache-2.0 license. We run it with <a href="https://onnxruntime.ai/" rel="noopener">ONNX Runtime Web</a> (MIT license), using your graphics chip through WebGPU where available and your processor otherwise. The website is hosted on Cloudflare.</p>
+
+      <h2>Limitations</h2>
+      <p>The model is good at people, animals, products and everyday objects, but no automatic tool is perfect. Very fine hair, transparent objects like glass, low-contrast scenes and busy group photos can produce rough edges. Older phones may be slow or run out of memory with large images.</p>
+
+      <h2>Sample photos</h2>
+      <p>The sample images are from Unsplash, by Matthew Wiebe, Alexander Shustov and Thomas Lefebvre, used under the Unsplash License.</p>
+
+      <h2>Contact</h2>
+      <p>Feedback, bug reports or questions: <a href="mailto:%VITE_CONTACT_EMAIL%">%VITE_CONTACT_EMAIL%</a>.</p>
+    </main>
+    <!--#include footer-->
+  </body>
+</html>

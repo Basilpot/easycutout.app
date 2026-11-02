@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.wrangler/
+.venv-tools/
+models-src/
+test-results/
+playwright-report/
+.env
+.env.*
+!.env.example
+.impeccable/
+.DS_Store

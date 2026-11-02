@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Round Image Corners Online – Rounded Corners &amp; Circle Crop | EasyCutout</title>
+    <meta
+      name="description"
+      content="Round the corners of any image online for free. Choose the corner radius or make a circle, keep the corners transparent, and download a PNG in full resolution. No sign-up, no uploads."
+    />
+    <link rel="canonical" href="%VITE_SITE_URL%/round-corners" />
+    <meta name="theme-color" content="#f6f5f2" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#141413" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<!--#include analytics-->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="EasyCutout" />
+    <meta property="og:title" content="Round Image Corners Online – Rounded Corners & Circle Crop" />
+    <meta property="og:description" content="Give any image rounded corners or make it a circle. Transparent PNG, full resolution, free, no sign-up." />
+    <meta property="og:url" content="%VITE_SITE_URL%/round-corners" />
+    <meta name="twitter:card" content="summary" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "EasyCutout Round Corners",
+        "url": "%VITE_SITE_URL%/round-corners",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "Any (modern web browser)",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "description": "Free online tool that rounds the corners of an image or crops it to a circle, with transparent corners."
+      }
+    </script>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body data-tool="corners">
+    <a class="skip" href="#tool">Skip to the tool</a>
+    <!--#include header-->
+
+    <main>
+      <section class="hero">
+        <h1>Round the corners of any image</h1>
+        <p class="lede">Pick a corner radius or go all the way to a circle. The corners stay transparent in the PNG. Free, full resolution, and your photo never leaves your device.</p>
+      </section>
+
+      <!--#include tool-->
+      <!--#define note-->
+        <p class="privacy-note">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+          Runs in your browser; nothing is uploaded. Want the background gone too? Press “Remove background” (the first time downloads a ~100&nbsp;MB AI model).
+        </p>
+      <!--/define-->
+
+      <section class="content">
+        <h2>How to round image corners</h2>
+        <ol class="steps">
+          <li><strong>Add your image.</strong> Upload, drag or paste it. It opens with medium rounded corners.</li>
+          <li><strong>Pick the radius.</strong> Use the slider or the presets: Small, Medium, Large or Circle.</li>
+          <li><strong>Download a PNG.</strong> The rounded corners are transparent, so the image sits cleanly on any background. A JPG fills them with white instead.</li>
+        </ol>
+      </section>
+
+      <section class="content">
+        <h2>Make a circle picture</h2>
+        <p>
+          For a round profile picture or avatar, open the Square tab and choose “Around subject” or “Whole image”, then choose “Circle” in the Corners tab. On a square image, the largest radius gives a perfect circle; on a rectangle it gives a pill shape. You can also <a href="/square-image-maker">make the image square first</a> on its own page.
+        </p>
+      </section>
+
+      <section class="content">
+        <h2>Where rounded corners look good</h2>
+        <ul class="tips">
+          <li><strong>Slides and documents:</strong> rounded screenshots and photos look softer and more modern.</li>
+          <li><strong>Websites and app mockups:</strong> match the rounded style of cards and buttons.</li>
+          <li><strong>Profile pictures and logos:</strong> a circle crop with a transparent background works on any site.</li>
+          <li><strong>Stickers:</strong> remove the background, add a color and round the corners for a sticker-style image.</li>
+        </ul>
+      </section>
+
+      <section class="content faq">
+        <h2>Frequently asked questions</h2>
+        <details>
+          <summary>Are the corners transparent?</summary>
+          <p>Yes, in the PNG download. JPG doesn’t support transparency, so its corners become white.</p>
+        </details>
+        <details>
+          <summary>How is the corner radius measured?</summary>
+          <p>As a percentage of the image’s shorter side: 50% is the maximum, which makes a circle on a square image and a pill shape on a rectangle.</p>
+        </details>
+        <details>
+          <summary>Can I remove the background as well?</summary>
+          <p>Yes. Press “Remove background” and the AI cuts out the main subject. You can then keep it transparent or choose a color in the Background tab.</p>
+        </details>
+        <details>
+          <summary>Is it free? Is my image uploaded?</summary>
+          <p>It’s free with no account or watermark. Everything happens in your browser, so your image is never uploaded.</p>
+        </details>
+      </section>
+    </main>
+
+    <!--#include footer-->
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

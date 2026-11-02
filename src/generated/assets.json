@@ -1,0 +1,29 @@
+{
+  "ortVersion": "1.30.0",
+  "model": {
+    "size": 90447799,
+    "chunkSize": 20971520,
+    "parts": [
+      "/m/isnet-fp16.281bde9eb439.0.bin",
+      "/m/isnet-fp16.281bde9eb439.1.bin",
+      "/m/isnet-fp16.281bde9eb439.2.bin",
+      "/m/isnet-fp16.281bde9eb439.3.bin",
+      "/m/isnet-fp16.281bde9eb439.4.bin"
+    ]
+  },
+  "wasmWebgpu": {
+    "size": 26781914,
+    "chunkSize": 20971520,
+    "parts": [
+      "/m/ort-asyncify.39f9f0894d47.0.wasm",
+      "/m/ort-asyncify.39f9f0894d47.1.wasm"
+    ]
+  },
+  "wasmCpu": {
+    "size": 14239897,
+    "chunkSize": 20971520,
+    "parts": [
+      "/m/ort-cpu.3398c10d07d2.0.wasm"
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "bg-remover",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare-model": "node scripts/prepare-model.mjs",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "pnpm build && wrangler dev",
+    "deploy": "pnpm build && wrangler deploy",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "onnxruntime-web": "1.30.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.7",
+    "wrangler": "^4.156.0"
+  }
+}

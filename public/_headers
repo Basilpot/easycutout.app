@@ -1,0 +1,20 @@
+/*
+  # Cross-origin isolation enables multi-threaded WASM (2–4x faster on CPUs without WebGPU).
+  # "credentialless" still allows loading cross-origin images/scripts without CORP headers.
+  # NOTE: before adding ad iframes (e.g. AdSense), test them with these headers or remove them.
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: credentialless
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+/m/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Temporary workers.dev address: keep it out of search results so it never competes
+# with the real domain. Custom domains don't match this rule.
+https://:worker.:account.workers.dev/*
+  X-Robots-Tag: noindex
