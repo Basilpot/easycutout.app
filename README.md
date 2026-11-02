@@ -43,16 +43,27 @@ Web Worker
 
 ## Run locally
 
-Requires Node 20+ and pnpm.
+Requires [Node 20+](https://nodejs.org/en) and [pnpm](https://pnpm.io/installation) (e.g. `corepack enable`).
 
 ```bash
+git clone <this-repo> && cd bg-remover
 pnpm install
-pnpm dev          # Vite dev server at http://localhost:5173
-pnpm preview      # production build served by `wrangler dev` (real headers & asset limits)
-pnpm test:e2e     # Playwright end-to-end tests (builds and serves via wrangler)
+cp .env.example .env   # then adjust VITE_SITE_URL / VITE_CONTACT_EMAIL if you need to
+pnpm dev               # Vite dev server at http://localhost:5173
 ```
 
-The model chunks in `public/m/` and `src/generated/assets.json` are committed, so a fresh checkout builds without Python.
+`.env` is gitignored — copy it from the committed `.env.example` and set the two `VITE_*` values. `vite.config.ts` refuses to start without both.
+
+Optional extras:
+
+```bash
+pnpm build                     # type-check + production build
+pnpm preview                   # serves the production build via wrangler dev (real headers & asset limits)
+pnpm test:e2e                  # Playwright end-to-end tests (serves build via wrangler on :8799)
+pnpm exec playwright install  # first run only: download Playwright browser binaries
+```
+
+A fresh checkout builds without Python. The model chunks in `public/m/` and `src/generated/assets.json` are committed, so you don't need the toolchain below just to run or build locally.
 
 ### Regenerating the model chunks
 
@@ -68,7 +79,7 @@ Chunk names include a content hash. Old chunks in visitors' caches are removed a
 
 ## Site address and contact email
 
-Both live in `.env`:
+Both live in `.env` (copied from `.env.example`):
 
 ```
 VITE_SITE_URL=https://easycutout.basilpot.com   # canonical links, Open Graph, sitemap.xml, robots.txt
