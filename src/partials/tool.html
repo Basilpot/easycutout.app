@@ -40,6 +40,7 @@
             <div class="editor-bar">
               <div class="tabs" role="tablist" aria-label="Edit">
                 <button type="button" role="tab" id="tab-bg" aria-controls="panel-bg" aria-selected="true">Background</button>
+                <button type="button" role="tab" id="tab-refine" aria-controls="panel-refine" aria-selected="false" tabindex="-1" hidden>Refine</button>
                 <button type="button" role="tab" id="tab-crop" aria-controls="panel-crop" aria-selected="false" tabindex="-1">Crop</button>
                 <button type="button" role="tab" id="tab-square" aria-controls="panel-square" aria-selected="false" tabindex="-1">Square</button>
                 <button type="button" role="tab" id="tab-corners" aria-controls="panel-corners" aria-selected="false" tabindex="-1">Corners</button>
@@ -76,6 +77,26 @@
                 <input id="bg-hex" class="hex-input" type="text" maxlength="7" spellcheck="false" autocomplete="off" autocapitalize="characters" placeholder="#A3D8FF" aria-describedby="hex-hint" />
                 <span id="hex-hint" class="hex-hint">e.g. #FFFFFF</span>
               </label>
+            </div>
+
+            <div role="tabpanel" id="panel-refine" aria-labelledby="tab-refine" class="panel" hidden>
+              <div class="chips" role="radiogroup" aria-label="Brush mode">
+                <button type="button" class="chip" role="radio" data-brush="restore" aria-checked="true">Restore</button>
+                <button type="button" class="chip" role="radio" data-brush="erase" aria-checked="false">Erase</button>
+              </div>
+              <label class="check-row">
+                <input type="checkbox" id="refine-smart" checked />
+                <span>Smart select: only affect colors similar to where you start</span>
+              </label>
+              <label class="slider">
+                <span>Brush</span>
+                <input type="range" id="refine-size" min="1" max="100" step="1" value="30" />
+                <span class="slider-value" id="refine-size-out" aria-hidden="true">30</span>
+              </label>
+              <div class="panel-row">
+                <button type="button" class="tool-btn" id="refine-undo" disabled>Undo stroke</button>
+              </div>
+              <p class="panel-hint">Paint over a part the AI removed to bring it back, or over leftover background to erase it. With smart select on, a loose stroke starting on the part you want snaps to its edges. Faint areas show what was removed.</p>
             </div>
 
             <div role="tabpanel" id="panel-crop" aria-labelledby="tab-crop" class="panel" hidden>

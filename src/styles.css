@@ -1257,3 +1257,33 @@ kbd {
     transition: none !important;
   }
 }
+
+/* Refine tab: brush painting on the preview */
+.canvas-wrap.refining canvas {
+  cursor: none;
+  touch-action: none;
+}
+.brush-cursor {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.6), inset 0 0 0 1px rgb(0 0 0 / 0.6);
+  transform: translate(-50%, -50%);
+}
+.brush-cursor[data-mode='erase'] {
+  border-color: #ff8a8a;
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+.check-row input {
+  accent-color: var(--accent);
+  width: 18px;
+  height: 18px;
+}

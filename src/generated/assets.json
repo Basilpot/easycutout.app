@@ -11,6 +11,13 @@
       "/m/isnet-fp16.281bde9eb439.4.bin"
     ]
   },
+  "quick": {
+    "size": 4574861,
+    "chunkSize": 20971520,
+    "parts": [
+      "/m/u2netp.309c8469258d.0.bin"
+    ]
+  },
   "wasmWebgpu": {
     "size": 26781914,
     "chunkSize": 20971520,

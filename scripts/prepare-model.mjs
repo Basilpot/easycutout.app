@@ -14,9 +14,10 @@ const ortVersion = JSON.parse(readFileSync(join(ortPkg, 'package.json'), 'utf8')
 const CHUNK = 20 * 1024 * 1024; // 20 MiB, well under the 25 MiB cap
 const outDir = join(root, 'public/m');
 const modelPath = join(root, 'models-src/isnet-fp16.onnx');
+const quickPath = join(root, 'models-src/u2netp.onnx');
 
-if (!existsSync(modelPath)) {
-  console.error(`Missing ${modelPath}. Run scripts/convert_model.py first (see README).`);
+if (!existsSync(modelPath) || !existsSync(quickPath)) {
+  console.error(`Missing ${modelPath} or ${quickPath}. Run scripts/convert_model.py first (see README).`);
   process.exit(1);
 }
 
@@ -40,6 +41,8 @@ function emit(name, file, ext = 'bin') {
 const assets = {
   ortVersion,
   model: emit('isnet-fp16', modelPath),
+  // Small model (4.6 MB) that answers first while the big one downloads.
+  quick: emit('u2netp', quickPath),
   // Used with the WebGPU build of onnxruntime-web (also runs the WASM backend).
   wasmWebgpu: emit('ort-asyncify', join(ortDist, 'ort-wasm-simd-threaded.asyncify.wasm'), 'wasm'),
   // Smaller CPU-only build for browsers without WebGPU.

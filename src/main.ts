@@ -20,6 +20,9 @@ import {
 } from './editor';
 import { addHistory, clearHistory, deleteHistory, listHistory, updateHistory, type HistoryItem } from './history';
 import type { ErrorCode, FromWorker, ToWorker } from './protocol';
+import assets from './generated/assets.json';
+import { CACHE_NAME } from './loader';
+import { Refiner } from './refine';
 import './shutdown';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -53,6 +56,11 @@ const squareMargin = $<HTMLInputElement>('square-margin');
 const squareMarginOut = $<HTMLSpanElement>('square-margin-out');
 const radiusInput = $<HTMLInputElement>('radius');
 const radiusOut = $<HTMLSpanElement>('radius-out');
+const refineTab = $<HTMLButtonElement>('tab-refine');
+const refineSmart = $<HTMLInputElement>('refine-smart');
+const refineSize = $<HTMLInputElement>('refine-size');
+const refineSizeOut = $<HTMLSpanElement>('refine-size-out');
+const refineUndo = $<HTMLButtonElement>('refine-undo');
 const photoSwatch = editor_q('[data-bg="photo"]');
 function editor_q(sel: string) {
   return document.querySelector<HTMLButtonElement>(`#editor ${sel}`)!;
@@ -121,45 +129,95 @@ interface Doc {
   photo: ImageBitmap | null; // Original photo at the cutout's size, decoded on demand for PHOTO_BG
   edits: Edits;
   removed: boolean; // Has the background been removed?
+  quick?: boolean; // Made by the small quick model; "Improve quality" re-runs the full one
 }
 
 let doc: Doc = { historyId: null, name: 'image', original: null, png: null, cut: null, photo: null, edits: { ...DEFAULT_EDITS }, removed: false };
 let view: 'result' | 'original' = 'result';
-let tab: 'bg' | 'crop' | 'square' | 'corners' | 'size' = TOOL === 'remove' ? 'bg' : TOOL;
+let tab: 'bg' | 'refine' | 'crop' | 'square' | 'corners' | 'size' = TOOL === 'remove' ? 'bg' : TOOL;
 let squareMode: 'image' | 'subject' | null = null;
 let aspect: number | null = null; // Locked crop aspect (w/h)
 let cropView: Rect | null = null; // Area shown while cropping (image + crop overlap)
 
-let worker: Worker | null = null;
+// Refine tab: brush session on a full-resolution copy of the cutout.
+let refiner: Refiner | null = null;
+let refineDirty = false; // Brush changes not yet written back to doc.cut / doc.png
+let refineTimer = 0;
+let refineChain: Promise<void> = Promise.resolve();
+let brushing = false;
+
+type Kind = 'full' | 'quick';
+const workers: Partial<Record<Kind, Worker>> = {};
 let jobId = 0;
+let jobKind: Kind = 'full'; // Which worker the current/last job runs on
 let jobSource: Blob | null = null; // What the current/last job processes (for "Try again")
 let pendingRedo: { ix: Rect } | null = null; // Area of the cutout being refined by "Redo removal"
 let originalUrl = '';
-let modelReady = false;
+let modelReady = false; // Full model ready
+let quickReady = false;
+let quickBroken = false;
 let jobStart = 0;
 
-function getWorker(): Worker {
-  if (worker) return worker;
+// Slow connections get a small model first (~19 MB instead of ~110 MB); the full one then
+// downloads in the background and "Improve quality" swaps it in. Skipped when the full model
+// is already cached, on fast connections, or with ?model=full. ?model=quick forces it.
+const modelParam = new URLSearchParams(location.search).get('model');
+const conn = (navigator as Navigator & { connection?: { saveData?: boolean; downlink?: number } }).connection;
+const saveData = !!conn?.saveData;
+const fastNet = !saveData && (conn?.downlink ?? 0) >= 10;
+let fullCached = false;
+if (AI_FIRST) {
+  void (async () => {
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      const hits = await Promise.all(assets.model.parts.map((p) => cache.match(p)));
+      fullCached = hits.every(Boolean);
+    } catch {
+      /* no Cache Storage: treat as not cached */
+    }
+  })();
+}
+const quickMode = () =>
+  AI_FIRST && !quickBroken && !modelReady && modelParam !== 'full' && (modelParam === 'quick' || (!fullCached && !fastNet));
+const pickKind = (): Kind => (quickMode() ? 'quick' : 'full');
+
+function getWorker(kind: Kind): Worker {
+  const existing = workers[kind];
+  if (existing) return existing;
   // `?backend=wasm` forces the CPU backend (handy for debugging and comparing).
-  worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module', name: forceWasm ? 'wasm' : 'auto' });
-  worker.onmessage = (e: MessageEvent<FromWorker>) => onWorkerMessage(e.data);
-  worker.onerror = (e) => {
+  const w = new Worker(new URL('./worker.ts', import.meta.url), {
+    type: 'module',
+    name: kind === 'quick' ? 'quick' : forceWasm ? 'wasm' : 'auto',
+  });
+  w.onmessage = (e: MessageEvent<FromWorker>) => onWorkerMessage(e.data, kind);
+  w.onerror = (e) => {
     console.error(e);
-    showError(ERRORS['model-init']);
-    worker?.terminate();
-    worker = null;
+    if (kind === 'quick') quickBroken = true;
+    if (jobKind === kind) showError(ERRORS['model-init']);
+    w.terminate();
+    delete workers[kind];
+    if (kind === 'full') fullWarm = false;
   };
-  return worker;
+  workers[kind] = w;
+  return w;
 }
 
-const send = (msg: ToWorker) => getWorker().postMessage(msg);
+const send = (msg: ToWorker, kind: Kind = 'full') => getWorker(kind).postMessage(msg);
 
 /** Start downloading the model as soon as the user shows intent, so it's ready sooner. */
 let warmedUp = false;
+let fullWarm = false;
 function warmup() {
   if (warmedUp) return;
   warmedUp = true;
-  send({ type: 'warmup' });
+  if (quickMode()) send({ type: 'warmup' }, 'quick');
+  else warmFull();
+}
+/** The big model. With data saver on it waits until the user asks for better quality. */
+function warmFull() {
+  if (fullWarm) return;
+  fullWarm = true;
+  send({ type: 'warmup' }, 'full');
 }
 
 function setProgress(fraction: number | null) {
@@ -173,42 +231,62 @@ function setStatus(text: string) {
 
 const mb = (n: number) => (n / 1048576).toFixed(0);
 
-function onWorkerMessage(msg: FromWorker) {
+function onWorkerMessage(msg: FromWorker, src: Kind) {
   if ('id' in msg && msg.id !== undefined && msg.id !== jobId) return; // Stale job.
+  const mine = src === jobKind && work.dataset.state === 'working';
   switch (msg.type) {
     case 'download':
-      if (!jobSource || work.dataset.state !== 'working') return; // Background warm-up: stay quiet.
+      if (!jobSource || !mine) return; // Background warm-up: stay quiet.
       setProgress(msg.loaded / msg.total);
       setStatus(`Downloading AI model (first time only)… ${mb(msg.loaded)} / ${mb(msg.total)} MB`);
       break;
     case 'ready':
-      modelReady = true;
-      console.info(`[cutly] model ready on ${msg.backend}${msg.threads ? ` (${msg.threads} threads)` : ''}`);
-      if (work.dataset.state === 'working') {
+      console.info(`[cutly] ${src} model ready on ${msg.backend}${msg.threads ? ` (${msg.threads} threads)` : ''}`);
+      if (src === 'quick') {
+        quickReady = true;
+        if (!saveData) warmFull(); // Quick files are in; fetch the big model in the background.
+      } else {
+        modelReady = true;
+        notifyUpgrade();
+      }
+      if (mine) {
         setProgress(null);
         setStatus('Removing background…');
       }
       break;
     case 'stage':
-      if (msg.stage === 'inferring' || (msg.stage === 'decoding' && modelReady)) {
+      if (mine && (msg.stage === 'inferring' || (msg.stage === 'decoding' && (src === 'quick' ? quickReady : modelReady)))) {
         setProgress(null);
         setStatus('Removing background…');
       }
       break;
     case 'result':
-      console.info(`[cutly] processed ${msg.width}×${msg.height} in ${msg.ms} ms`);
-      void onResult(msg.png, msg.downscaled, msg.id);
+      console.info(`[cutly] ${src} processed ${msg.width}×${msg.height} in ${msg.ms} ms`);
+      void onResult(msg.png, msg.downscaled, msg.id, src);
       break;
     case 'error':
       if (msg.id === undefined && work.dataset.state !== 'working') {
-        warmedUp = false; // Warm-up failed quietly; retry when an image arrives.
+        // Warm-up failed quietly; retry when an image arrives.
+        if (src === 'full') fullWarm = false;
+        warmedUp = false;
         return;
       }
-      console.error('[cutly]', msg.code, msg.detail);
-      if (msg.code === 'model-download' || msg.code === 'model-init') warmedUp = false;
+      console.error('[cutly]', src, msg.code, msg.detail);
+      if (msg.code === 'model-download' || msg.code === 'model-init') {
+        warmedUp = false;
+        if (src === 'quick') quickBroken = true; // "Try again" then uses the full model.
+        else fullWarm = false;
+      }
       showError(ERRORS[msg.code]);
       break;
   }
+}
+
+/** The full model finished loading while a quick result is on screen: offer the upgrade. */
+function notifyUpgrade() {
+  if (work.dataset.state !== 'done' || !doc.quick) return;
+  updateRedoButton();
+  setStatus('Sharper AI model is ready. Click “Improve quality” for cleaner edges.');
 }
 
 // --- Processing ----------------------------------------------------------------
@@ -253,7 +331,9 @@ async function ensurePhoto(): Promise<boolean> {
 const srcOf = () => ({ cut: doc.cut!, photo: doc.photo });
 
 /** New image from the user. */
-function start(file: Blob) {
+async function start(file: Blob) {
+  await commitRefine();
+  endRefine();
   freeCut();
   pendingRedo = null;
   doc = { historyId: null, name: baseName(file), original: file, png: null, cut: null, photo: null, edits: presetEdits(), removed: false };
@@ -324,8 +404,10 @@ async function openPlain(file: Blob) {
 }
 
 /** Send `source` to the worker and show the working state. */
-function process(source: Blob) {
+function process(source: Blob, force?: Kind) {
   jobId++;
+  jobKind = force ?? pickKind();
+  const ready = jobKind === 'quick' ? quickReady : modelReady;
   jobSource = source;
   jobStart = performance.now();
   enterWork();
@@ -340,17 +422,20 @@ function process(source: Blob) {
   toggle.hidden = true;
   downloadBtn.hidden = downloadJpgBtn.hidden = true;
   retryBtn.hidden = true;
-  setProgress(modelReady ? null : 0);
-  setStatus(modelReady ? 'Removing background…' : 'Preparing AI model…');
-  if (!forceWasm) store.set(GPU_PENDING, '1');
-  send({ type: 'process', id: jobId, file: source });
+  setProgress(ready ? null : 0);
+  setStatus(ready ? 'Removing background…' : 'Preparing AI model…');
+  if (jobKind === 'full' && !forceWasm) store.set(GPU_PENDING, '1');
+  if (jobKind === 'full') fullWarm = true;
+  send({ type: 'process', id: jobId, file: source }, jobKind);
 }
 
-async function onResult(png: Blob, downscaled: boolean, id: number) {
+async function onResult(png: Blob, downscaled: boolean, id: number, src: Kind) {
   store.del(GPU_PENDING);
+  endRefine(); // The cutout is about to change; the brush session restarts from the new one.
   let cut = await createImageBitmap(png);
   if (id !== jobId) return cut.close(); // Superseded while decoding.
 
+  const regional = !!pendingRedo; // Only part of the image was redone
   if (pendingRedo && doc.cut) {
     // Paste the refined crop area back into the full cutout, so the crop, the
     // original and "Reset edits" all keep working on the whole image.
@@ -376,14 +461,17 @@ async function onResult(png: Blob, downscaled: boolean, id: number) {
   doc.cut = cut;
   doc.png = png;
   doc.removed = true;
+  if (!regional) doc.quick = src === 'quick';
 
   const secs = ((performance.now() - jobStart) / 1000).toFixed(1);
-  showDone(`Done in ${secs}s.${downscaled ? ' Large image was reduced to 16 megapixels.' : ''}`);
+  const upgrade = doc.quick ? (modelReady ? ' Click “Improve quality” for cleaner edges.' : saveData ? ' Click “Improve quality” to download the sharper model.' : ' Sharper model is downloading in the background.') : '';
+  showDone(`Done in ${secs}s.${upgrade}${downscaled ? ' Large image was reduced to 16 megapixels.' : ''}`);
   void saveToHistory(true);
 }
 
 /** "Redo removal": run the model again, only on the cropped area when there is a crop. */
 async function redo() {
+  await commitRefine();
   if (!doc.original || !doc.cut) return;
   if (!doc.removed) {
     // First removal on the square/corners pages: whole photo, edits kept.
@@ -391,6 +479,8 @@ async function redo() {
     warmup();
     return process(doc.original);
   }
+  const force: Kind | undefined = doc.quick ? 'full' : undefined; // "Improve quality"
+  if (force) warmFull();
   const cut = doc.cut;
   const crop = doc.edits.crop;
   pendingRedo = null;
@@ -426,7 +516,7 @@ async function redo() {
       }
     }
   }
-  process(source);
+  process(source, force);
 }
 
 // --- Views ---------------------------------------------------------------------
@@ -449,19 +539,29 @@ function showDone(status: string) {
   editor.hidden = false;
   toggle.hidden = !doc.original;
   redoBtn.disabled = !doc.original;
-  $('redo-label').textContent = doc.removed ? 'Redo removal' : 'Remove background';
-  redoBtn.title = !doc.original
-    ? 'Not available: the original photo wasn’t saved for this image.'
-    : doc.removed
-      ? 'Run background removal again. After cropping, it only looks at the cropped area, which often gives finer edges.'
-      : 'Cut out the main subject with AI. The first time downloads a ~100 MB model.';
+  updateRedoButton();
   retryBtn.hidden = true;
   downloadBtn.hidden = false;
   view = 'result';
+  const canRefine = doc.removed && !!doc.original;
+  refineTab.hidden = !canRefine;
+  if (tab === 'refine' && !canRefine) tab = 'bg';
   selectTab(tab); // Editor is visible now, so the tab strip can scroll.
+  if (tab === 'refine' && !refiner) void startRefine().then(render);
   syncControls();
   render();
   downloadBtn.focus({ preventScroll: true });
+}
+
+function updateRedoButton() {
+  $('redo-label').textContent = doc.removed ? (doc.quick ? 'Improve quality' : 'Redo removal') : 'Remove background';
+  redoBtn.title = !doc.original
+    ? 'Not available: the original photo wasn’t saved for this image.'
+    : doc.quick
+      ? 'Run the full-size AI model for cleaner edges. It downloads in the background after the first cut-out.'
+      : doc.removed
+        ? 'Run background removal again. After cropping, it only looks at the cropped area, which often gives finer edges.'
+        : 'Cut out the main subject with AI. The first time downloads a ~100 MB model.';
 }
 
 function showError(text: string) {
@@ -494,6 +594,27 @@ function render() {
   const e = doc.edits;
   canvasWrap.classList.toggle('opaque', isOpaque(e)); // Checkerboard shows through transparent corners.
 
+  if (tab === 'refine' && refiner) {
+    // Whole image, with the removed parts faintly visible so they can be painted back.
+    refiner.flush();
+    renderTo(canvas, { cut: refiner.canvas }, { bg: null, crop: null, width: null }, PREVIEW_MAX, { noCorners: true });
+    if (doc.photo) {
+      const g = canvas.getContext('2d')!;
+      g.save();
+      g.globalCompositeOperation = 'destination-over';
+      g.globalAlpha = 0.3;
+      g.drawImage(doc.photo, 0, 0, canvas.width, canvas.height);
+      g.restore();
+    }
+    cropBox.el.hidden = true;
+    canvasWrap.classList.remove('cropping');
+    canvasWrap.classList.add('refining');
+    canvasWrap.classList.remove('opaque');
+    updateOutputInfo();
+    return;
+  }
+  canvasWrap.classList.remove('refining');
+  brushCursor.hidden = true;
   if (tab === 'crop') {
     cropView ??= union({ x: 0, y: 0, w: cut.width, h: cut.height }, cropOf(cut, e));
     renderTo(canvas, srcOf(), { bg: e.bg, crop: cropView, width: null }, PREVIEW_MAX, { noCorners: true });
@@ -574,10 +695,15 @@ function selectTab(next: typeof tab, scroll = true) {
 }
 selectTab(tab, false); // Square/corners pages open on their own tab.
 
-function setTab(next: typeof tab) {
+async function setTab(next: typeof tab) {
+  if (tab === 'refine' && next !== 'refine') {
+    await commitRefine();
+    endRefine();
+  }
   selectTab(next);
   cropView = null;
   if (view === 'original') view = 'result';
+  if (next === 'refine') await startRefine();
   render();
 }
 
@@ -589,6 +715,159 @@ function edit(patch: Partial<Edits>, opts: { resetView?: boolean } = {}) {
   render();
   scheduleSave();
 }
+
+// --- Refine --------------------------------------------------------------------
+
+const brushCursor = document.createElement('div');
+brushCursor.className = 'brush-cursor';
+brushCursor.hidden = true;
+canvasWrap.append(brushCursor);
+
+async function startRefine() {
+  if (refiner || !doc.cut) return;
+  if (!(await ensurePhoto()) || !doc.cut || !doc.photo) {
+    setStatus('The original photo couldn’t be loaded, so it can’t be refined.');
+    return;
+  }
+  const d = doc;
+  const r = new Refiner(doc.cut, doc.photo);
+  if (doc !== d || refiner) return r.dispose(); // Image changed meanwhile.
+  refiner = r;
+  syncBrush();
+}
+
+function endRefine() {
+  clearTimeout(refineTimer);
+  refiner?.dispose();
+  refiner = null;
+  refineDirty = false;
+  brushing = false;
+  brushCursor.hidden = true;
+  canvasWrap.classList.remove('refining');
+}
+
+/** Write brush changes back into doc.cut / doc.png (and history). Resolves when written. */
+function commitRefine(): Promise<void> {
+  clearTimeout(refineTimer);
+  const r = refiner;
+  const d = doc;
+  if (!r || !refineDirty) return refineChain;
+  refineDirty = false;
+  r.flush();
+  refineChain = refineChain.then(async () => {
+    const blob = await new Promise<Blob | null>((res) => r.canvas.toBlob(res, 'image/png'));
+    if (!blob || refiner !== r || doc !== d) return;
+    const bmp = await createImageBitmap(blob);
+    if (refiner !== r || doc !== d) return bmp.close();
+    d.cut?.close();
+    d.cut = bmp;
+    d.png = blob;
+    void saveToHistory(true);
+  });
+  return refineChain;
+}
+
+function syncBrush() {
+  if (!refiner) return;
+  const { width, height } = refiner.canvas;
+  refiner.radius = Math.max(2, (Number(refineSize.value) * Math.max(width, height)) / 1000);
+  refiner.smart = refineSmart.checked;
+  refiner.mode = editor.querySelector('[data-brush][aria-checked="true"]')?.getAttribute('data-brush') === 'erase' ? 'erase' : 'restore';
+  refineSizeOut.textContent = refineSize.value;
+  refineUndo.disabled = !refiner.canUndo;
+  brushCursor.dataset.mode = refiner.mode;
+}
+
+function placeCursor(e: PointerEvent) {
+  if (!refiner) return;
+  const rect = canvas.getBoundingClientRect();
+  const wrap = canvasWrap.getBoundingClientRect();
+  const px = (refiner.radius * 2 * rect.width) / refiner.canvas.width;
+  Object.assign(brushCursor.style, {
+    width: `${px}px`,
+    height: `${px}px`,
+    left: `${e.clientX - wrap.left}px`,
+    top: `${e.clientY - wrap.top}px`,
+  });
+  brushCursor.hidden = false;
+}
+
+const toImage = (e: PointerEvent) => {
+  const rect = canvas.getBoundingClientRect();
+  return { x: ((e.clientX - rect.left) / rect.width) * refiner!.canvas.width, y: ((e.clientY - rect.top) / rect.height) * refiner!.canvas.height };
+};
+
+let frame = 0;
+const paintSoon = () => {
+  if (frame) return;
+  frame = requestAnimationFrame(() => {
+    frame = 0;
+    render();
+  });
+};
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (tab !== 'refine' || !refiner || e.button > 0) return;
+  e.preventDefault();
+  canvas.setPointerCapture(e.pointerId);
+  brushing = true;
+  syncBrush();
+  const p = toImage(e);
+  refiner.begin(p.x, p.y);
+  placeCursor(e);
+  paintSoon();
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (tab !== 'refine' || !refiner) return;
+  placeCursor(e);
+  if (!brushing) return;
+  // Coalesced events keep fast strokes smooth.
+  for (const ev of e.getCoalescedEvents?.() ?? [e]) {
+    const p = toImage(ev);
+    refiner.moveTo(p.x, p.y);
+  }
+  paintSoon();
+});
+const endBrush = () => {
+  if (!brushing || !refiner) return;
+  brushing = false;
+  if (refiner.end()) {
+    refineDirty = true;
+    clearTimeout(refineTimer);
+    refineTimer = window.setTimeout(() => void commitRefine(), 400);
+  }
+  syncBrush();
+  paintSoon();
+};
+canvas.addEventListener('pointerup', endBrush);
+canvas.addEventListener('pointercancel', endBrush);
+canvas.addEventListener('pointerleave', () => {
+  if (!brushing) brushCursor.hidden = true;
+});
+
+function undoStroke() {
+  if (!refiner?.undo()) return;
+  refineDirty = true;
+  clearTimeout(refineTimer);
+  refineTimer = window.setTimeout(() => void commitRefine(), 400);
+  syncBrush();
+  render();
+}
+refineUndo.addEventListener('click', undoStroke);
+window.addEventListener('keydown', (e) => {
+  if (tab === 'refine' && refiner && (e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && !(e.target as HTMLElement).closest('input, textarea')) {
+    e.preventDefault();
+    undoStroke();
+  }
+});
+editor.querySelector('[aria-label="Brush mode"]')!.addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-brush]');
+  if (!b) return;
+  for (const c of editor.querySelectorAll('[data-brush]')) c.setAttribute('aria-checked', String(c === b));
+  syncBrush();
+});
+refineSmart.addEventListener('change', syncBrush);
+refineSize.addEventListener('input', syncBrush);
 
 // --- Crop ----------------------------------------------------------------------
 
@@ -718,18 +997,19 @@ $('panel-size').addEventListener('click', (e) => {
 
 // --- Tabs, toggle, misc --------------------------------------------------------
 
-const tabs = [...editor.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+const allTabs = [...editor.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
 editor.querySelector('[role="tablist"]')!.addEventListener('click', (e) => {
   const t = (e.target as HTMLElement).closest<HTMLButtonElement>('[role="tab"]');
-  if (t) setTab(t.id.replace('tab-', '') as typeof tab);
+  if (t) void setTab(t.id.replace('tab-', '') as typeof tab);
 });
 editor.querySelector('[role="tablist"]')!.addEventListener('keydown', (e) => {
   const ke = e as KeyboardEvent;
   if (ke.key !== 'ArrowLeft' && ke.key !== 'ArrowRight') return;
+  const tabs = allTabs.filter((t) => !t.hidden);
   const i = tabs.findIndex((t) => t.id === `tab-${tab}`);
   const next = tabs[(i + (ke.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
   next.focus();
-  setTab(next.id.replace('tab-', '') as typeof tab);
+  void setTab(next.id.replace('tab-', '') as typeof tab);
 });
 
 toggle.addEventListener('click', (e) => {
@@ -767,6 +1047,7 @@ function saveBlob(blob: Blob, name: string) {
 }
 
 async function download(type: 'image/png' | 'image/jpeg', btn: HTMLButtonElement) {
+  await commitRefine();
   if (!doc.cut || !doc.png) return;
   const ext = type === 'image/png' ? 'png' : 'jpg';
   btn.disabled = true;
@@ -843,6 +1124,8 @@ function scheduleSave() {
 }
 
 async function openFromHistory(item: HistoryItem) {
+  await commitRefine();
+  endRefine();
   jobId++; // Ignore any in-flight job.
   store.del(GPU_PENDING);
   pendingRedo = null;
@@ -940,7 +1223,9 @@ void renderHistory();
 
 // --- New image / reset ---------------------------------------------------------
 
-function reset() {
+async function reset() {
+  await commitRefine();
+  endRefine();
   store.del(GPU_PENDING);
   clearTimeout(saveTimer);
   if (doc.historyId && doc.cut) void saveToHistory(false); // Flush pending edits.
@@ -1046,7 +1331,7 @@ if (/Mac|iPhone|iPad/.test(navigator.platform)) {
   document.querySelectorAll('kbd').forEach((k) => k.textContent === 'Ctrl' && (k.textContent = '⌘'));
 }
 
-resetBtn.addEventListener('click', reset);
+resetBtn.addEventListener('click', () => void reset());
 retryBtn.addEventListener('click', () => {
   if (!jobSource) return;
   if (doc.cut || pendingRedo) process(jobSource);
@@ -1065,8 +1350,10 @@ window.addEventListener('resize', () => {
 // restore a fresh worker is created on demand.
 window.addEventListener('pagehide', () => {
   store.del(GPU_PENDING); // Normal navigation away is not a crash.
-  worker?.postMessage({ type: 'dispose' } satisfies ToWorker);
-  worker = null;
-  modelReady = false;
-  warmedUp = false;
+  for (const kind of ['full', 'quick'] as const) {
+    workers[kind]?.postMessage({ type: 'dispose' } satisfies ToWorker);
+    delete workers[kind];
+  }
+  modelReady = quickReady = false;
+  warmedUp = fullWarm = false;
 });

@@ -8,7 +8,7 @@ export interface ChunkedAsset {
   parts: string[];
 }
 
-const CACHE_NAME = 'bgr-assets-v1';
+export const CACHE_NAME = 'bgr-assets-v1';
 
 async function openCache(): Promise<Cache | null> {
   try {

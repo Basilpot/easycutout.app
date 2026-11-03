@@ -4,7 +4,8 @@ Run once (or when changing the model):
     uv venv -p 3.12 .venv-tools && VIRTUAL_ENV=.venv-tools uv pip install onnx onnxconverter-common
     .venv-tools/bin/python scripts/convert_model.py
 
-Output: models-src/isnet-fp16.onnx (~90 MB). Then run `pnpm prepare-model`.
+Output: models-src/isnet-fp16.onnx and models-src/u2netp.onnx (4.6 MB, the
+"quick" model shown first on slow connections). Then run `pnpm prepare-model`.
 
 Model: IS-Net "general use" weights by Xuebin Qin et al. (DIS, Apache-2.0),
 as exported to ONNX by the rembg project.
@@ -39,3 +40,14 @@ model = onnx.load(pruned)
 model16 = float16.convert_float_to_float16(model, keep_io_types=True, op_block_list=["Resize"])
 onnx.save(model16, dst)
 print("Wrote", dst, os.path.getsize(dst), "bytes")
+
+# Small "quick" model: U²-Net-P (Apache-2.0 weights, rembg export), used unchanged.
+QUICK_URL = "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx"
+QUICK_SHA256 = "309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8"
+quick = os.path.join(OUT, "u2netp.onnx")
+if not os.path.exists(quick):
+    print("Downloading", QUICK_URL)
+    urllib.request.urlretrieve(QUICK_URL, quick)
+digest = hashlib.sha256(open(quick, "rb").read()).hexdigest()
+assert digest == QUICK_SHA256, f"checksum mismatch: {digest}"
+print("Verified", quick, os.path.getsize(quick), "bytes")

@@ -9,7 +9,10 @@ import type { Backend, ErrorCode, FromWorker, ToWorker } from './protocol';
 type Ort = typeof import('onnxruntime-web');
 type Session = import('onnxruntime-web').InferenceSession;
 
-const SIZE = 1024; // ISNet input resolution.
+// Two flavours of this worker. "quick": small U²-Net-P (4.6 MB) on the CPU backend, so a first
+// cut-out appears after a ~19 MB download. Otherwise: IS-Net at 1024², WebGPU when available.
+const QUICK = self.name === 'quick';
+const SIZE = QUICK ? 320 : 1024; // Model input resolution.
 // iOS Safari refuses canvases above ~16.7 MP; also keeps memory sane on phones.
 const MAX_PIXELS = 16_000_000;
 const MAX_SIDE = 4096;
@@ -39,11 +42,12 @@ async function init() {
   if (typeof OffscreenCanvas === 'undefined' || typeof WebAssembly === 'undefined') {
     throw new AppError('unsupported');
   }
-  const useGpu = ctx.name !== 'wasm' && (await webgpuAvailable());
+  const useGpu = !QUICK && ctx.name !== 'wasm' && (await webgpuAvailable());
   const wasmAsset = useGpu ? assets.wasmWebgpu : assets.wasmCpu;
-  void pruneCache([...assets.model.parts, ...assets.wasmWebgpu.parts, ...assets.wasmCpu.parts]);
+  void pruneCache([...assets.model.parts, ...assets.quick.parts, ...assets.wasmWebgpu.parts, ...assets.wasmCpu.parts]);
 
-  const total = assets.model.size + wasmAsset.size;
+  const modelAsset = QUICK ? assets.quick : assets.model;
+  const total = modelAsset.size + wasmAsset.size;
   let loaded = 0;
   let lastPost = 0;
   const onBytes = (n: number) => {
@@ -61,7 +65,7 @@ async function init() {
   try {
     [ort, model, wasmBinary] = await Promise.all([
       useGpu ? import('onnxruntime-web/webgpu') : import('onnxruntime-web/wasm'),
-      loadAsset(assets.model, onBytes),
+      loadAsset(modelAsset, onBytes),
       loadAsset(wasmAsset, onBytes),
     ]);
   } catch (err) {
@@ -139,11 +143,13 @@ function toTensorData(bitmap: ImageBitmap): Float32Array {
   const { data } = g.getImageData(0, 0, SIZE, SIZE);
   const plane = SIZE * SIZE;
   const out = new Float32Array(3 * plane);
-  // ISNet normalisation: x / 255 - 0.5 (std = 1), CHW layout.
+  // CHW layout. IS-Net: x / 255 - 0.5. U²-Net-P: ImageNet mean/std.
+  const mean = QUICK ? [0.485, 0.456, 0.406] : [0.5, 0.5, 0.5];
+  const std = QUICK ? [0.229, 0.224, 0.225] : [1, 1, 1];
   for (let i = 0, p = 0; p < plane; i += 4, p++) {
-    out[p] = data[i] / 255 - 0.5;
-    out[p + plane] = data[i + 1] / 255 - 0.5;
-    out[p + 2 * plane] = data[i + 2] / 255 - 0.5;
+    out[p] = (data[i] / 255 - mean[0]) / std[0];
+    out[p + plane] = (data[i + 1] / 255 - mean[1]) / std[1];
+    out[p + 2 * plane] = (data[i + 2] / 255 - mean[2]) / std[2];
   }
   return out;
 }
@@ -162,7 +168,10 @@ function maskCanvas(pred: Float32Array): OffscreenCanvas {
   const img = new ImageData(SIZE, SIZE);
   const d = img.data;
   for (let p = 0, i = 3; p < pred.length; p++, i += 4) {
-    d[i] = ((pred[p] - min) / range) * 255;
+    let v = (pred[p] - min) / range;
+    // The 320² model gives soft, haloed edges after upscaling: tighten them a little.
+    if (QUICK) v = v <= 0.2 ? 0 : v >= 0.8 ? 1 : ((v - 0.2) / 0.6) ** 2 * (3 - (2 * (v - 0.2)) / 0.6);
+    d[i] = v * 255;
   }
   const c = new OffscreenCanvas(SIZE, SIZE);
   c.getContext('2d')!.putImageData(img, 0, 0);

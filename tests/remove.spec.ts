@@ -77,7 +77,7 @@ test('static pages load', async ({ page }) => {
 });
 
 test('huge image is downscaled, model is cached across visits', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?model=full');
   await page.locator('#file').setInputFiles(process.env.HUGE_IMAGE ?? 'public/samples/bear.jpg');
   await expect(page.getByRole('button', { name: 'Download PNG' })).toBeVisible();
   if (process.env.HUGE_IMAGE) await expect(page.getByRole('status')).toContainText('reduced to 16 megapixels');
@@ -87,7 +87,7 @@ test('huge image is downscaled, model is cached across visits', async ({ page })
   const modelRequests: string[] = [];
   const page2 = await page.context().newPage();
   page2.on('request', (r) => r.url().includes('/m/') && modelRequests.push(r.url()));
-  await page2.goto('/');
+  await page2.goto('/?model=full');
   await page2.locator('#file').setInputFiles('public/samples/dog.jpg');
   await expect(page2.getByRole('button', { name: 'Download PNG' })).toBeVisible();
   expect(modelRequests).toEqual([]); // Served from Cache Storage.
@@ -131,7 +131,7 @@ test('history keeps results across visits; download, delete, clear', async ({ pa
 });
 
 test('editor: background color, crop, resize, redo, and edits persist in history', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?model=full');
   await page.locator('#file').setInputFiles('public/samples/dog.jpg');
   const dl = page.getByRole('button', { name: 'Download PNG' });
   await expect(dl).toBeVisible();
@@ -199,7 +199,7 @@ test('remove.bg closure sentence switches tense after Dec 1, 2026', async ({ pag
 });
 
 test('square maker, rounded corners, original background and hex color', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?model=full');
   await page.locator('#file').setInputFiles('public/samples/dog.jpg'); // 1200×800
   const dl = page.getByRole('button', { name: 'Download PNG' });
   await expect(dl).toBeVisible();
@@ -294,4 +294,60 @@ test('round corners page: rounded by default, transparent corners', async ({ pag
   expect(stats.corner).toBe(0);
   expect(stats.center).toBe(255);
   expect(model).toEqual([]);
+});
+
+test('refine: brush restores and erases, undo works, result is exported', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file').setInputFiles('public/samples/dog.jpg');
+  const dl = page.getByRole('button', { name: 'Download PNG' });
+  await expect(dl).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Refine' }).click();
+  await page.getByRole('checkbox', { name: /Smart select/ }).uncheck();
+  await page.locator('#refine-size').fill('100');
+  await page.locator('#canvas').scrollIntoViewIfNeeded();
+  const box = (await page.locator('#canvas').boundingBox())!;
+  const at = (fx: number, fy: number) => [box.x + box.width * fx, box.y + box.height * fy] as const;
+
+  // Restore the (removed) top-left corner.
+  await page.getByRole('radio', { name: 'Restore' }).click();
+  await page.mouse.move(...at(0.03, 0.03));
+  await page.mouse.down();
+  await page.mouse.move(...at(0.08, 0.08), { steps: 5 });
+  await page.mouse.up();
+
+  // Erase the middle of the subject, then undo that stroke.
+  await page.getByRole('radio', { name: 'Erase' }).click();
+  await page.mouse.move(...at(0.45, 0.5));
+  await page.mouse.down();
+  await page.mouse.move(...at(0.55, 0.5), { steps: 5 });
+  await page.mouse.up();
+  await page.getByRole('button', { name: 'Undo stroke' }).click();
+
+  const [file] = await Promise.all([page.waitForEvent('download'), dl.click()]);
+  const stats = await analyse(page, await file.path());
+  expect(stats.corner).toBeGreaterThan(200); // restored
+  expect(stats.center).toBeGreaterThan(200); // erase was undone
+});
+
+test('slow connection: quick model answers first, then "Improve quality" upgrades it', async ({ page }) => {
+  const modelParts: string[] = [];
+  page.on('request', (r) => /\/m\/(isnet|u2netp)/.test(r.url()) && modelParts.push(r.url()));
+  await page.goto('/?model=quick');
+  await page.locator('#file').setInputFiles('public/samples/dog.jpg');
+  const status = page.getByRole('status');
+  await expect(status).toContainText('Done');
+  expect(modelParts.some((u) => u.includes('u2netp'))).toBe(true);
+
+  // The big model is fetched in the background; the button then offers the upgrade.
+  await expect(status).toContainText('Sharper AI model is ready');
+  const improve = page.getByRole('button', { name: 'Improve quality' });
+  await improve.click();
+  await expect(status).toContainText('Done');
+  await expect(page.getByRole('button', { name: 'Redo removal' })).toBeVisible();
+
+  const [file] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download PNG' }).click()]);
+  const stats = await analyse(page, await file.path());
+  expect(stats.corner).toBeLessThan(10);
+  expect(stats.center).toBeGreaterThan(200);
 });

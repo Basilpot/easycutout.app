@@ -23,6 +23,7 @@ Web Worker
                  └─ saved to "Your recent images" (IndexedDB, this device only)
 ```
 
+- **Quick model first:** when the full model isn't cached yet and the connection isn't clearly fast (`navigator.connection.downlink` under 10 Mbps, or unknown as on Safari/Firefox), a second worker (`name: 'quick'`) runs [U²-Net-P](https://github.com/xuebinqin/U-2-Net) (4.4 MiB, Apache-2.0 weights via rembg) on the CPU wasm build. First cut-out needs ~18 MiB instead of ~112 MiB. Once the quick model is ready, the full model downloads in the background, and the "Improve quality" button re-runs the image with it. With the browser's data-saver on, the full download waits for that click. `?model=quick` / `?model=full` force a mode (the e2e tests that depend on full quality use `?model=full`).
 - **Model:** [IS-Net general-use](https://github.com/xuebinqin/DIS) (Apache-2.0), using the ONNX export from rembg. It's converted to fp16 weights (86 MiB), and the extra side outputs are removed.
 - **Runtime:** [onnxruntime-web](https://onnxruntime.ai/) 1.30.0 (MIT).
 - **Hosting:** Workers static assets only. No Worker script runs, so the Workers request and CPU limits don't apply.
@@ -130,7 +131,7 @@ The first image also waits for the model download. Speed on low-end phones was n
 
 ## Known issues and limitations
 
-- **Big first download.** ~112 MB on browsers with WebGPU, ~100 MB without. On slow mobile connections that takes minutes. The page shows a progress bar and saves the files for later. The download starts only when the user shows intent (hovering or tapping the upload area, or dragging a file) so visitors who just bounce don't pay for it.
+- **Big first download.** The full model is ~112 MB with WebGPU, ~100 MB without. On slow connections the quick model (~18 MB) answers first (see above); its cut-outs are rougher (soft edges, and it sometimes drops large parts such as clothing, which the Refine brush can paint back). The page shows a progress bar and saves the files for later. The download starts only when the user shows intent (hovering or tapping the upload area, or dragging a file) so visitors who just bounce don't pay for it.
 - **WebKit WebGPU crash after reload.** In Playwright's WebKit, running the model, reloading the page and running it again crashes the tab. A fresh tab works. It's not verified on real Safari. Guard: if the tab dies mid-job, the next load uses the CPU backend for 7 days (`cutly.gpuBlockedAt` in localStorage). `?backend=wasm` forces the CPU backend for testing.
 - **Firefox untested.** Playwright's Firefox wouldn't launch in this environment. It should work on the WASM path (and on WebGPU where Firefox supports it), but check by hand.
 - **Safari is single-threaded on CPU.** We use `COEP: credentialless` to get multi-threaded WASM, and Safari doesn't support it. This only matters when WebGPU isn't available.
